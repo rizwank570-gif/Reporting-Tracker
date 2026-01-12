@@ -15,7 +15,6 @@
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
         .checkpoint-card:last-child { border-left-color: transparent; }
-        /* Prevent text selection to feel like a native app */
         body { -webkit-tap-highlight-color: transparent; user-select: none; }
         input { user-select: text; }
     </style>
@@ -23,7 +22,7 @@
 <body class="bg-slate-50 min-h-screen text-slate-800">
 
     <div class="max-w-md mx-auto min-h-screen flex flex-col p-4">
-        <!-- Header with Logo and Title -->
+        <!-- Header -->
         <header class="mb-6 py-4 flex justify-between items-center border-b border-slate-200">
             <div class="flex items-center gap-3">
                 <img src="https://lh3.googleusercontent.com/d/1tEhpUFrhZMyXGnrZTOwwAEN73mS3vOSo" 
@@ -40,13 +39,12 @@
             </div>
         </header>
 
-        <!-- Main Status Card (Now visible by default) -->
+        <!-- Main Status Card -->
         <div id="status-card" class="glass-morphism rounded-3xl p-6 shadow-xl shadow-blue-100 mb-6 border-t-4 border-blue-500">
             <div id="onboarding-state">
                 <h2 class="text-lg font-semibold mb-2">Start Your Day</h2>
                 <p class="text-sm text-slate-600 mb-4">Enter details and upload speedometer photo.</p>
                 
-                <!-- Mobile Number Input -->
                 <div class="mb-4">
                     <label class="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Mobile Number</label>
                     <input type="tel" id="user-mobile" placeholder="Enter 10-digit mobile" 
@@ -71,7 +69,6 @@
                     <span class="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full uppercase tracking-wider">On Duty</span>
                     <span class="text-sm font-medium text-slate-500" id="session-time">Started --:--</span>
                 </div>
-                <!-- Device Info Display -->
                 <div class="mb-4 px-3 py-2 bg-slate-100 rounded-lg flex justify-between items-center">
                     <span class="text-[10px] font-bold text-slate-400 uppercase">Device ID:</span>
                     <span id="display-imei" class="text-[10px] font-mono text-slate-600">Detecting...</span>
@@ -100,9 +97,7 @@
                 <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest">Route Timeline</h3>
                 <span id="loading-indicator" class="hidden text-[10px] text-blue-500 animate-pulse font-bold">GETTING LOCATION...</span>
             </div>
-            <div id="timeline" class="space-y-0">
-                <!-- Checkpoints populated by JS -->
-            </div>
+            <div id="timeline" class="space-y-0"></div>
         </div>
 
         <!-- Footer Actions -->
@@ -119,33 +114,53 @@
         <div class="bg-white rounded-3xl p-6 w-full max-w-sm">
             <h2 class="text-xl font-bold mb-2">End of Shift</h2>
             <p class="text-sm text-slate-600 mb-6">Summary: <span id="summary-km" class="font-bold text-blue-600">0 km</span>. Final photo required.</p>
-            
             <label class="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 mb-4">
-                <div class="flex flex-col items-center justify-center">
-                    <i class="fas fa-camera text-2xl text-slate-400 mb-2"></i>
-                    <p class="text-xs text-slate-500">Final Speedometer Photo</p>
-                </div>
+                <i class="fas fa-camera text-2xl text-slate-400 mb-2"></i>
+                <p class="text-xs text-slate-500">Final Speedometer Photo</p>
                 <input type="file" accept="image/*" capture="camera" class="hidden" id="end-photo" onchange="completeDay(event)" />
             </label>
-            
             <button onclick="document.getElementById('end-modal').style.display='none'" class="w-full text-slate-400 text-sm font-medium">Cancel</button>
         </div>
     </div>
 
     <!-- Notification Toast -->
-    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full bg-slate-800 text-white text-sm font-medium shadow-2xl opacity-0 transition-opacity pointer-events-none z-50">
-        Syncing...
-    </div>
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full bg-slate-800 text-white text-sm font-medium shadow-2xl opacity-0 transition-opacity pointer-events-none z-50">Syncing...</div>
 
     <script>
         // --- CONFIGURATION ---
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzQO7ilvP8ahShlhd-vxtCTg_Mji9eVNB_Fsf5XCn0KNRZmpATggmUZfntnIwmlvuY/exec"; 
         
         let checkpoints = [];
-        let startTime = null;
         let sessionID = Date.now().toString(); 
         let userMobile = "";
         let deviceIMEI = "";
+
+        /**
+         * Returns IST Time as a forced string.
+         * The leading single quote "'" prevents Google Sheets from converting it to UTC.
+         */
+        function getISTTimeString() {
+            const now = new Date();
+            const istTime = new Intl.DateTimeFormat('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            }).format(now);
+            return "'" + istTime; 
+        }
+
+        function getISTDateString() {
+            const now = new Date();
+            const istDate = new Intl.DateTimeFormat('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            }).format(now);
+            return "'" + istDate;
+        }
 
         function getDeviceID() {
             let id = localStorage.getItem('tracker_device_id');
@@ -162,6 +177,13 @@
                 weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
             });
             document.getElementById('display-imei').innerText = deviceIMEI;
+            
+            // Auto-load mobile if it was entered before in the same browser session
+            const savedMobile = localStorage.getItem('tracker_user_mobile');
+            if (savedMobile) {
+                document.getElementById('user-mobile').value = savedMobile;
+                userMobile = savedMobile;
+            }
         };
 
         function showToast(msg) {
@@ -173,36 +195,66 @@
 
         function updateSyncStatus(status) {
             const el = document.getElementById('sync-status');
-            if (status === 'syncing') {
-                el.innerHTML = '<i class="fas fa-sync fa-spin text-blue-400 mr-1"></i> Syncing';
-            } else if (status === 'success') {
-                el.innerHTML = '<i class="fas fa-check-circle text-green-500 mr-1"></i> Synced';
-            } else if (status === 'error') {
-                el.innerHTML = '<i class="fas fa-exclamation-circle text-red-500 mr-1"></i> Sync Error';
-            }
+            if (status === 'syncing') el.innerHTML = '<i class="fas fa-sync fa-spin text-blue-400 mr-1"></i> Syncing';
+            else if (status === 'success') el.innerHTML = '<i class="fas fa-check-circle text-green-500 mr-1"></i> Synced';
+            else if (status === 'error') el.innerHTML = '<i class="fas fa-exclamation-circle text-red-500 mr-1"></i> Sync Error';
         }
 
-        const toBase64 = file => new Promise((resolve, reject) => {
+        /**
+         * Compresses image to speed up mobile uploads
+         */
+        const compressImage = (file) => new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 800; // Optimal for reading meter values
+                    const MAX_HEIGHT = 800;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height *= MAX_WIDTH / width;
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width *= MAX_HEIGHT / height;
+                            height = MAX_HEIGHT;
+                        }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    // 0.6 quality reduces size by ~70-80% without losing text legibility
+                    resolve(canvas.toDataURL('image/jpeg', 0.6));
+                };
+            };
             reader.onerror = error => reject(error);
         });
 
         async function saveToGoogleSheets(data) {
             if (!GOOGLE_SCRIPT_URL) return;
-            
             updateSyncStatus('syncing');
             
-            const now = new Date();
+            const currentMobile = userMobile || document.getElementById('user-mobile').value;
+            const currentIMEI = deviceIMEI || getDeviceID();
+            const exactTime = getISTTimeString();
+            const exactDate = getISTDateString();
+
             const payload = {
                 ...data,
                 sessionId: sessionID,
-                mobile: userMobile || document.getElementById('user-mobile').value,
-                imei: deviceIMEI,
-                exactTime: now.toLocaleTimeString(),
-                exactDate: now.toLocaleDateString(),
-                deviceTimestamp: now.toLocaleString()
+                mobile: "'" + currentMobile, 
+                imei: "'" + currentIMEI,     
+                exactTime: exactTime, 
+                exactDate: exactDate, 
+                deviceTimestamp: new Date().toLocaleString()
             };
 
             try {
@@ -214,51 +266,48 @@
                 });
                 updateSyncStatus('success');
             } catch (e) {
+                console.error("Sync error:", e);
                 updateSyncStatus('error');
             }
         }
 
         async function handleStartDay(event) {
             const mobileInput = document.getElementById('user-mobile');
-            const errorMsg = document.getElementById('onboarding-error');
-            
             if (mobileInput.value.length < 10) {
-                errorMsg.classList.remove('hidden');
+                document.getElementById('onboarding-error').classList.remove('hidden');
                 event.target.value = ''; 
                 return;
             }
             
-            errorMsg.classList.add('hidden');
             userMobile = mobileInput.value;
+            localStorage.setItem('tracker_user_mobile', userMobile);
 
             if (event.target.files && event.target.files[0]) {
-                const file = event.target.files[0];
                 const uploadPrompt = document.getElementById('upload-prompt');
-                
-                uploadPrompt.innerHTML = '<i class="fas fa-circle-notch fa-spin text-2xl text-blue-500 mb-2"></i><p class="text-xs text-blue-600 font-medium">Processing Photo...</p>';
+                uploadPrompt.innerHTML = '<i class="fas fa-circle-notch fa-spin text-2xl text-blue-500 mb-2"></i><p class="text-xs text-blue-600 font-medium">Compressing...</p>';
                 
                 try {
-                    const base64Img = await toBase64(file);
-                    startTime = new Date();
+                    // Optimized image compression
+                    const base64Img = await compressImage(event.target.files[0]);
+                    uploadPrompt.innerHTML = '<i class="fas fa-sync fa-spin text-2xl text-blue-500 mb-2"></i><p class="text-xs text-blue-600 font-medium">Uploading Small File...</p>';
+                    
+                    const timeString = getISTTimeString().replace("'", ""); 
 
                     await saveToGoogleSheets({
                         action: 'START_DAY_PHOTO',
-                        timestamp: startTime.toISOString(),
-                        localTime: startTime.toLocaleTimeString(),
+                        localTime: timeString,
                         image: base64Img,
-                        imageName: `start_${sessionID}.jpg`,
-                        type: 'Initial Speedometer'
+                        imageName: `start_${sessionID}.jpg`
                     });
 
                     document.getElementById('onboarding-state').classList.add('hidden');
                     document.getElementById('active-state').classList.remove('hidden');
                     document.getElementById('footer-actions').classList.remove('hidden');
-                    document.getElementById('session-time').innerText = `Started ${startTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                    document.getElementById('session-time').innerText = `Started ${timeString}`;
                     
                     await performCheckIn(true);
-                    
                 } catch (err) {
-                    alert("Error processing image. Please try again.");
+                    alert("Upload error. Check internet and try again.");
                     uploadPrompt.innerHTML = '<i class="fas fa-camera text-2xl text-blue-500 mb-2"></i><p class="text-xs text-blue-600 font-medium">Capture Speedometer</p>';
                 }
             }
@@ -267,7 +316,6 @@
         async function performCheckIn(isFirst = false) {
             const btn = document.getElementById('checkin-btn');
             const loader = document.getElementById('loading-indicator');
-            
             if (!isFirst) {
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Locating...';
@@ -275,9 +323,9 @@
             loader.classList.remove('hidden');
 
             navigator.geolocation.getCurrentPosition(async (position) => {
-                const now = new Date();
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
+                const timeString = getISTTimeString().replace("'", "");
                 
                 let locality = "Location captured";
                 try {
@@ -289,9 +337,7 @@
                 }
 
                 const newCheckpoint = {
-                    time: now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                    timestamp: now.toISOString(),
-                    localTimeFull: now.toLocaleTimeString(),
+                    time: timeString,
                     lat: lat,
                     lon: lon,
                     locality: locality,
@@ -300,8 +346,7 @@
 
                 if (checkpoints.length > 0) {
                     const prev = checkpoints[checkpoints.length - 1];
-                    const dist = calculateDistance(prev.lat, prev.lon, lat, lon);
-                    newCheckpoint.distance = dist;
+                    newCheckpoint.distance = calculateDistance(prev.lat, prev.lon, lat, lon);
                 }
 
                 checkpoints.push(newCheckpoint);
@@ -320,7 +365,14 @@
                     showToast("Location Captured");
                 }
             }, (err) => {
-                alert("Location capture failed. Please ensure GPS is on.");
+                const timeString = getISTTimeString().replace("'", "");
+                const loc = prompt("GPS failed. Please enter location name:");
+                if(loc) {
+                    const newCheckpoint = { time: timeString, lat: 0, lon: 0, locality: loc + " (Manual)", distance: 0 };
+                    checkpoints.push(newCheckpoint);
+                    updateUI();
+                    saveToGoogleSheets({ action: 'CHECK_IN_MANUAL', ...newCheckpoint });
+                }
                 loader.classList.add('hidden');
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-location-dot"></i> Check-In New Location';
@@ -328,24 +380,22 @@
         }
 
         function calculateDistance(lat1, lon1, lat2, lon2) {
+            if(lat1 === 0 || lat2 === 0) return 0;
             const R = 6371; 
-            const dLat = deg2rad(lat2 - lat1);
-            const dLon = deg2rad(lon2 - lon1);
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
             const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
                       Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c; 
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         }
-
-        function deg2rad(deg) { return deg * (Math.PI / 180); }
 
         function updateUI() {
             const timeline = document.getElementById('timeline');
             timeline.innerHTML = '';
             let totalKm = 0;
             
-            checkpoints.forEach((cp, index) => {
+            [...checkpoints].forEach((cp, index) => {
                 totalKm += cp.distance;
                 const card = document.createElement('div');
                 card.className = "checkpoint-card flex gap-4 border-l-2 border-slate-200 ml-3 pb-6 pl-6 relative";
@@ -355,7 +405,7 @@
                     <span class="absolute -left-[7px] top-0 w-3 h-3 ${dotColor} rounded-full z-10"></span>
                     <div class="flex-1">
                         <div class="flex justify-between items-start">
-                            <p class="text-xs font-bold text-slate-400 uppercase tracking-tighter">${cp.time}</p>
+                            <p class="text-xs font-bold text-slate-400 uppercase">${cp.time}</p>
                             ${cp.distance > 0 ? `<span class="text-xs font-bold text-blue-500">+${cp.distance.toFixed(2)} km</span>` : ''}
                         </div>
                         <h4 class="text-sm font-semibold text-slate-800">${index === 0 ? 'Start Point' : 'Location Check-in'}</h4>
@@ -376,21 +426,18 @@
 
         async function completeDay(event) {
             if (event.target.files && event.target.files[0]) {
-                const now = new Date();
-                const file = event.target.files[0];
+                const timeString = getISTTimeString().replace("'", "");
                 const finalKm = document.getElementById('total-km').innerText;
-                const duration = Math.round((now - startTime) / 60000);
-                const base64Img = await toBase64(file);
+                
+                // Optimized image compression for end day
+                const base64Img = await compressImage(event.target.files[0]);
 
                 await saveToGoogleSheets({
                     action: 'END_DAY',
-                    timestamp: now.toISOString(),
-                    localTime: now.toLocaleTimeString(),
+                    localTime: timeString,
                     totalKm: finalKm,
-                    durationMinutes: duration,
                     image: base64Img,
-                    imageName: `end_${sessionID}.jpg`,
-                    type: 'Final Speedometer'
+                    imageName: `end_${sessionID}.jpg`
                 });
                 
                 document.body.innerHTML = `
@@ -399,9 +446,9 @@
                             <i class="fas fa-check text-3xl"></i>
                         </div>
                         <h1 class="text-2xl font-bold mb-2">Workday Submitted!</h1>
-                        <p class="text-slate-500 mb-8">Data synced successfully.</p>
+                        <p class="text-slate-500 mb-2">Time: ${timeString}</p>
                         <div class="w-full bg-white rounded-3xl p-6 shadow-xl mb-8 text-left border-t-4 border-green-500">
-                            <p class="text-xs text-slate-400 uppercase font-bold">Total Distance Travelled</p>
+                            <p class="text-xs text-slate-400 uppercase font-bold">Total Distance</p>
                             <p class="text-3xl font-black text-slate-900">${finalKm} KM</p>
                         </div>
                         <button onclick="window.location.reload()" class="text-blue-600 font-bold">Start New Shift</button>
