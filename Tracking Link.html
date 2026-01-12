@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Field Reporting Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .glass-morphism {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .checkpoint-card:last-child { border-left-color: transparent; }
+        /* Prevent text selection to feel like a native app */
+        body { -webkit-tap-highlight-color: transparent; user-select: none; }
+        input { user-select: text; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+
+    <div class="max-w-md mx-auto min-h-screen flex flex-col p-4">
+        <!-- Header with Logo and Title -->
+        <header class="mb-6 py-4 flex justify-between items-center border-b border-slate-200">
+            <div class="flex items-center gap-3">
+                <img src="https://lh3.googleusercontent.com/d/1tEhpUFrhZMyXGnrZTOwwAEN73mS3vOSo" 
+                     alt="Logo" 
+                     class="w-12 h-12 object-contain rounded-lg bg-white p-1 shadow-sm"
+                     onerror="this.src='https://via.placeholder.com/48?text=Logo'">
+                <div>
+                    <h1 class="text-xl font-bold text-slate-900 leading-tight">Field Reporting Tracker</h1>
+                    <p class="text-xs text-slate-500" id="current-date"></p>
+                </div>
+            </div>
+            <div id="sync-status" class="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                <i class="fas fa-circle text-gray-300 mr-1"></i> Offline
+            </div>
+        </header>
+
+        <!-- Main Status Card (Now visible by default) -->
+        <div id="status-card" class="glass-morphism rounded-3xl p-6 shadow-xl shadow-blue-100 mb-6 border-t-4 border-blue-500">
+            <div id="onboarding-state">
+                <h2 class="text-lg font-semibold mb-2">Start Your Day</h2>
+                <p class="text-sm text-slate-600 mb-4">Enter details and upload speedometer photo.</p>
+                
+                <!-- Mobile Number Input -->
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Mobile Number</label>
+                    <input type="tel" id="user-mobile" placeholder="Enter 10-digit mobile" 
+                           class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+                           maxlength="10">
+                </div>
+
+                <div class="flex items-center justify-center w-full">
+                    <label id="start-label" class="flex flex-col items-center justify-center w-full h-32 border-2 border-blue-300 border-dashed rounded-2xl cursor-pointer bg-blue-50 hover:bg-blue-100 transition-colors">
+                        <div id="upload-prompt" class="flex flex-col items-center justify-center pt-5 pb-6">
+                            <i class="fas fa-camera text-2xl text-blue-500 mb-2"></i>
+                            <p class="text-xs text-blue-600 font-medium">Capture Speedometer</p>
+                        </div>
+                        <input type="file" accept="image/*" capture="camera" class="hidden" id="start-photo" onchange="handleStartDay(event)" />
+                    </label>
+                </div>
+                <p id="onboarding-error" class="text-red-500 text-[10px] mt-2 font-bold hidden text-center">Please enter mobile number first</p>
+            </div>
+
+            <div id="active-state" class="hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full uppercase tracking-wider">On Duty</span>
+                    <span class="text-sm font-medium text-slate-500" id="session-time">Started --:--</span>
+                </div>
+                <!-- Device Info Display -->
+                <div class="mb-4 px-3 py-2 bg-slate-100 rounded-lg flex justify-between items-center">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase">Device ID:</span>
+                    <span id="display-imei" class="text-[10px] font-mono text-slate-600">Detecting...</span>
+                </div>
+                <div class="grid grid-cols-2 gap-4 text-center">
+                    <div class="bg-slate-50 p-3 rounded-xl">
+                        <p class="text-xs text-slate-500 uppercase">Total KM</p>
+                        <p class="text-xl font-bold text-blue-600" id="total-km">0.0</p>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-xl">
+                        <p class="text-xs text-slate-500 uppercase">Stops</p>
+                        <p class="text-xl font-bold text-blue-600" id="stop-count">0</p>
+                    </div>
+                </div>
+                
+                <button onclick="performCheckIn()" id="checkin-btn" class="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-200 flex items-center justify-center gap-2 transition-transform active:scale-95">
+                    <i class="fas fa-location-dot"></i>
+                    Check-In New Location
+                </button>
+            </div>
+        </div>
+
+        <!-- Timeline Section -->
+        <div class="flex-1">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest">Route Timeline</h3>
+                <span id="loading-indicator" class="hidden text-[10px] text-blue-500 animate-pulse font-bold">GETTING LOCATION...</span>
+            </div>
+            <div id="timeline" class="space-y-0">
+                <!-- Checkpoints populated by JS -->
+            </div>
+        </div>
+
+        <!-- Footer Actions -->
+        <div id="footer-actions" class="hidden mt-6 pb-8">
+            <button onclick="prepareEndDay()" class="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl shadow-lg flex items-center justify-center gap-2">
+                <i class="fas fa-flag-checkered"></i>
+                Close Day
+            </button>
+        </div>
+    </div>
+
+    <!-- End Day Modal -->
+    <div id="end-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-6 z-50">
+        <div class="bg-white rounded-3xl p-6 w-full max-w-sm">
+            <h2 class="text-xl font-bold mb-2">End of Shift</h2>
+            <p class="text-sm text-slate-600 mb-6">Summary: <span id="summary-km" class="font-bold text-blue-600">0 km</span>. Final photo required.</p>
+            
+            <label class="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 mb-4">
+                <div class="flex flex-col items-center justify-center">
+                    <i class="fas fa-camera text-2xl text-slate-400 mb-2"></i>
+                    <p class="text-xs text-slate-500">Final Speedometer Photo</p>
+                </div>
+                <input type="file" accept="image/*" capture="camera" class="hidden" id="end-photo" onchange="completeDay(event)" />
+            </label>
+            
+            <button onclick="document.getElementById('end-modal').style.display='none'" class="w-full text-slate-400 text-sm font-medium">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full bg-slate-800 text-white text-sm font-medium shadow-2xl opacity-0 transition-opacity pointer-events-none z-50">
+        Syncing...
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzQO7ilvP8ahShlhd-vxtCTg_Mji9eVNB_Fsf5XCn0KNRZmpATggmUZfntnIwmlvuY/exec"; 
+        
+        let checkpoints = [];
+        let startTime = null;
+        let sessionID = Date.now().toString(); 
+        let userMobile = "";
+        let deviceIMEI = "";
+
+        function getDeviceID() {
+            let id = localStorage.getItem('tracker_device_id');
+            if (!id) {
+                id = 'DEV-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+                localStorage.setItem('tracker_device_id', id);
+            }
+            return id;
+        }
+
+        window.onload = () => {
+            deviceIMEI = getDeviceID();
+            document.getElementById('current-date').innerText = new Date().toLocaleDateString('en-US', { 
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+            });
+            document.getElementById('display-imei').innerText = deviceIMEI;
+        };
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.style.opacity = '1';
+            setTimeout(() => t.style.opacity = '0', 3000);
+        }
+
+        function updateSyncStatus(status) {
+            const el = document.getElementById('sync-status');
+            if (status === 'syncing') {
+                el.innerHTML = '<i class="fas fa-sync fa-spin text-blue-400 mr-1"></i> Syncing';
+            } else if (status === 'success') {
+                el.innerHTML = '<i class="fas fa-check-circle text-green-500 mr-1"></i> Synced';
+            } else if (status === 'error') {
+                el.innerHTML = '<i class="fas fa-exclamation-circle text-red-500 mr-1"></i> Sync Error';
+            }
+        }
+
+        const toBase64 = file => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+        });
+
+        async function saveToGoogleSheets(data) {
+            if (!GOOGLE_SCRIPT_URL) return;
+            
+            updateSyncStatus('syncing');
+            
+            const now = new Date();
+            const payload = {
+                ...data,
+                sessionId: sessionID,
+                mobile: userMobile || document.getElementById('user-mobile').value,
+                imei: deviceIMEI,
+                exactTime: now.toLocaleTimeString(),
+                exactDate: now.toLocaleDateString(),
+                deviceTimestamp: now.toLocaleString()
+            };
+
+            try {
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors', 
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                updateSyncStatus('success');
+            } catch (e) {
+                updateSyncStatus('error');
+            }
+        }
+
+        async function handleStartDay(event) {
+            const mobileInput = document.getElementById('user-mobile');
+            const errorMsg = document.getElementById('onboarding-error');
+            
+            if (mobileInput.value.length < 10) {
+                errorMsg.classList.remove('hidden');
+                event.target.value = ''; 
+                return;
+            }
+            
+            errorMsg.classList.add('hidden');
+            userMobile = mobileInput.value;
+
+            if (event.target.files && event.target.files[0]) {
+                const file = event.target.files[0];
+                const uploadPrompt = document.getElementById('upload-prompt');
+                
+                uploadPrompt.innerHTML = '<i class="fas fa-circle-notch fa-spin text-2xl text-blue-500 mb-2"></i><p class="text-xs text-blue-600 font-medium">Processing Photo...</p>';
+                
+                try {
+                    const base64Img = await toBase64(file);
+                    startTime = new Date();
+
+                    await saveToGoogleSheets({
+                        action: 'START_DAY_PHOTO',
+                        timestamp: startTime.toISOString(),
+                        localTime: startTime.toLocaleTimeString(),
+                        image: base64Img,
+                        imageName: `start_${sessionID}.jpg`,
+                        type: 'Initial Speedometer'
+                    });
+
+                    document.getElementById('onboarding-state').classList.add('hidden');
+                    document.getElementById('active-state').classList.remove('hidden');
+                    document.getElementById('footer-actions').classList.remove('hidden');
+                    document.getElementById('session-time').innerText = `Started ${startTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                    
+                    await performCheckIn(true);
+                    
+                } catch (err) {
+                    alert("Error processing image. Please try again.");
+                    uploadPrompt.innerHTML = '<i class="fas fa-camera text-2xl text-blue-500 mb-2"></i><p class="text-xs text-blue-600 font-medium">Capture Speedometer</p>';
+                }
+            }
+        }
+
+        async function performCheckIn(isFirst = false) {
+            const btn = document.getElementById('checkin-btn');
+            const loader = document.getElementById('loading-indicator');
+            
+            if (!isFirst) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Locating...';
+            }
+            loader.classList.remove('hidden');
+
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const now = new Date();
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                
+                let locality = "Location captured";
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+                    const data = await response.json();
+                    locality = data.display_name.split(',')[0] + ', ' + (data.address.city || data.address.suburb || "Locality Found");
+                } catch (e) {
+                    locality = `Lat: ${lat.toFixed(3)}, Lon: ${lon.toFixed(3)}`;
+                }
+
+                const newCheckpoint = {
+                    time: now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    timestamp: now.toISOString(),
+                    localTimeFull: now.toLocaleTimeString(),
+                    lat: lat,
+                    lon: lon,
+                    locality: locality,
+                    distance: 0
+                };
+
+                if (checkpoints.length > 0) {
+                    const prev = checkpoints[checkpoints.length - 1];
+                    const dist = calculateDistance(prev.lat, prev.lon, lat, lon);
+                    newCheckpoint.distance = dist;
+                }
+
+                checkpoints.push(newCheckpoint);
+                updateUI();
+
+                saveToGoogleSheets({
+                    action: isFirst ? 'INITIAL_CHECKIN' : 'CHECK_IN',
+                    ...newCheckpoint,
+                    totalCumulativeKm: document.getElementById('total-km').innerText
+                });
+                
+                loader.classList.add('hidden');
+                if (!isFirst) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-location-dot"></i> Check-In New Location';
+                    showToast("Location Captured");
+                }
+            }, (err) => {
+                alert("Location capture failed. Please ensure GPS is on.");
+                loader.classList.add('hidden');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-location-dot"></i> Check-In New Location';
+            }, { enableHighAccuracy: true, timeout: 10000 });
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; 
+            const dLat = deg2rad(lat2 - lat1);
+            const dLon = deg2rad(lon2 - lon1);
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c; 
+        }
+
+        function deg2rad(deg) { return deg * (Math.PI / 180); }
+
+        function updateUI() {
+            const timeline = document.getElementById('timeline');
+            timeline.innerHTML = '';
+            let totalKm = 0;
+            
+            checkpoints.forEach((cp, index) => {
+                totalKm += cp.distance;
+                const card = document.createElement('div');
+                card.className = "checkpoint-card flex gap-4 border-l-2 border-slate-200 ml-3 pb-6 pl-6 relative";
+                const dotColor = index === checkpoints.length - 1 ? 'bg-blue-600' : 'bg-slate-300';
+                
+                card.innerHTML = `
+                    <span class="absolute -left-[7px] top-0 w-3 h-3 ${dotColor} rounded-full z-10"></span>
+                    <div class="flex-1">
+                        <div class="flex justify-between items-start">
+                            <p class="text-xs font-bold text-slate-400 uppercase tracking-tighter">${cp.time}</p>
+                            ${cp.distance > 0 ? `<span class="text-xs font-bold text-blue-500">+${cp.distance.toFixed(2)} km</span>` : ''}
+                        </div>
+                        <h4 class="text-sm font-semibold text-slate-800">${index === 0 ? 'Start Point' : 'Location Check-in'}</h4>
+                        <p class="text-sm text-slate-500 leading-tight">${cp.locality}</p>
+                    </div>
+                `;
+                timeline.prepend(card);
+            });
+
+            document.getElementById('total-km').innerText = totalKm.toFixed(2);
+            document.getElementById('stop-count').innerText = checkpoints.length;
+        }
+
+        function prepareEndDay() {
+            document.getElementById('summary-km').innerText = document.getElementById('total-km').innerText + " km";
+            document.getElementById('end-modal').style.display = 'flex';
+        }
+
+        async function completeDay(event) {
+            if (event.target.files && event.target.files[0]) {
+                const now = new Date();
+                const file = event.target.files[0];
+                const finalKm = document.getElementById('total-km').innerText;
+                const duration = Math.round((now - startTime) / 60000);
+                const base64Img = await toBase64(file);
+
+                await saveToGoogleSheets({
+                    action: 'END_DAY',
+                    timestamp: now.toISOString(),
+                    localTime: now.toLocaleTimeString(),
+                    totalKm: finalKm,
+                    durationMinutes: duration,
+                    image: base64Img,
+                    imageName: `end_${sessionID}.jpg`,
+                    type: 'Final Speedometer'
+                });
+                
+                document.body.innerHTML = `
+                    <div class="flex flex-col items-center justify-center min-h-screen p-8 text-center">
+                        <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
+                            <i class="fas fa-check text-3xl"></i>
+                        </div>
+                        <h1 class="text-2xl font-bold mb-2">Workday Submitted!</h1>
+                        <p class="text-slate-500 mb-8">Data synced successfully.</p>
+                        <div class="w-full bg-white rounded-3xl p-6 shadow-xl mb-8 text-left border-t-4 border-green-500">
+                            <p class="text-xs text-slate-400 uppercase font-bold">Total Distance Travelled</p>
+                            <p class="text-3xl font-black text-slate-900">${finalKm} KM</p>
+                        </div>
+                        <button onclick="window.location.reload()" class="text-blue-600 font-bold">Start New Shift</button>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
